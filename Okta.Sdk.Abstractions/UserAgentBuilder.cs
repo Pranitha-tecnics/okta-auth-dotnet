@@ -5,7 +5,8 @@
 
 using System;
 using System.Linq;
-using System.Reflection;
+using System.Net;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 
 namespace Okta.Sdk.Abstractions
@@ -16,11 +17,28 @@ namespace Okta.Sdk.Abstractions
     public sealed class UserAgentBuilder
     {
         // Lazy ensures this only runs once and is cached.
+        /// <summary>
+        /// Defines the _cachedUserAgent.
+        /// </summary>
         private readonly Lazy<string> _cachedUserAgent;
 
+        /// <summary>
+        /// Defines the _oktaSdkUserAgentName.
+        /// </summary>
         private string _oktaSdkUserAgentName = string.Empty;
 
+        /// <summary>
+        /// Defines the _sdkVersion.
+        /// </summary>
         private Version _sdkVersion;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="UserAgentBuilder"/> class.
+        /// </summary>
+        public UserAgentBuilder()
+        {
+            _cachedUserAgent = new Lazy<string>(this.Generate);
+        }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="UserAgentBuilder"/> class.
@@ -40,29 +58,63 @@ namespace Okta.Sdk.Abstractions
         /// <returns>A User-Agent string with the default tokens, and any additional tokens.</returns>
         public string GetUserAgent() => _cachedUserAgent.Value;
 
+        /// <summary>
+        /// The Generate.
+        /// </summary>
+        /// <returns>The <see cref="string"/>.</returns>
         private string Generate()
         {
-            var sdkToken = $"{_oktaSdkUserAgentName}/{GetSdkVersion()}";
+            //var sdkToken = $"{_oktaSdkUserAgentName}/{GetSdkVersion()}";
 
+            var machineName = $"machineName/{Environment.MachineName}";
+
+            var machineIP = $"machineIP/{this.GetLocalIPAddress()}";
             var runtimeToken = $"runtime/{UserAgentHelper.GetRuntimeVersion()}";
 
             var operatingSystemToken = $"os/{Sanitize(RuntimeInformation.OSDescription)}";
 
             return string.Join(
                 " ",
-                sdkToken,
-                runtimeToken,
-                operatingSystemToken)
+                machineName,
+                machineIP,
+                operatingSystemToken,
+                runtimeToken)
             .Trim();
         }
 
-        private string GetSdkVersion()
+        /// <summary>
+        /// The GetLocalIPAddress.
+        /// </summary>
+        /// <returns>The <see cref="string"/>.</returns>
+        private string GetLocalIPAddress()
         {
-            return $"{_sdkVersion.Major}.{_sdkVersion.Minor}.{_sdkVersion.Build}";
+            var host = Dns.GetHostEntry(Dns.GetHostName());
+            foreach (var ip in host.AddressList)
+            {
+                if (ip.AddressFamily == AddressFamily.InterNetwork)
+                {
+                    return ip.ToString();
+                }
+            }
+
+            throw new Exception("No network adapters with an IPv4 address in the system!");
         }
 
+        //private string GetSdkVersion()
+        //{
+        //    return $"{_sdkVersion.Major}.{_sdkVersion.Minor}.{_sdkVersion.Build}";
+        //}
+
+        /// <summary>
+        /// Defines the IllegalCharacters.
+        /// </summary>
         private static readonly char[] IllegalCharacters = new char[] { '/', ':', ';' };
 
+        /// <summary>
+        /// The Sanitize.
+        /// </summary>
+        /// <param name="input">The input<see cref="string"/>.</param>
+        /// <returns>The <see cref="string"/>.</returns>
         private static string Sanitize(string input)
             => IllegalCharacters.Aggregate(input, (current, bad) => current.Replace(bad, '-'));
     }
